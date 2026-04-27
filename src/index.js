@@ -14,36 +14,49 @@ async function scrapeList(url) {
     const html = await res.text()
     const $ = load(html)
     const data = []
-    $('article, .post, .item, .ml-item').each((i, el) => {
-      const title = $(el).find('h2, .entry-title, .post-title').text().trim()
+    
+    // Selector lebih luas biar semua film ketangkep
+    $('article, .post, .item, .ml-item, .col-md-2').each((i, el) => {
+      const title = $(el).find('h2, .entry-title, .post-title, h3').text().trim()
       const link = $(el).find('a').attr('href')
-      const img = $(el).find('img').attr('data-src') || $(el).find('img').attr('src')
-      if (title && link) data.push({ title, link, img })
+      let img = $(el).find('img').attr('data-src') || $(el).find('img').attr('src')
+      
+      if (title && link) {
+        if (img && img.startsWith('//')) img = 'https:' + img
+        data.push({ title, link, img: img || 'https://via.placeholder.com/300x450?text=No+Image' })
+      }
     })
     return data
   } catch { return [] }
 }
 
-// Routes Dasar
 app.get('/', async (c) => c.json({ status: true, data: await scrapeList(TARGET) }))
-app.get('/search', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${c.req.query('q')}`) }))
-app.get('/tag/:slug', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/tag/${c.req.param('slug')}/`) }))
 
-// Endpoint Kategori Baru (Sesuai permintaan kamu)
+// FIX: Route khusus buat Indonesia pake parameter search advanced
+app.get('/indonesia', async (c) => {
+  const url = `${TARGET}/?s=&search=advanced&post_type=post&country=indonesia`
+  const data = await scrapeList(url)
+  return c.json({ status: true, data })
+})
+
 app.get('/category/:slug', async (c) => {
   const slug = c.req.param('slug')
   const data = await scrapeList(`${TARGET}/category/${slug}/`)
-  return c.json({ status: true, category: slug, data })
+  return c.json({ status: true, data })
 })
 
-// Endpoint Filter (Untuk Advanced Search)
-app.get('/filter', async (c) => {
-  const { genre, country, year } = c.req.query()
-  const url = `${TARGET}/?s=&search=advanced&post_type=post&genre=${genre||''}&movieyear=${year||''}&country=${country||''}`
-  return c.json({ status: true, data: await scrapeList(url) })
+app.get('/tag/:slug', async (c) => {
+  const slug = c.req.param('slug')
+  const data = await scrapeList(`${TARGET}/tag/${slug}/`)
+  return c.json({ status: true, data })
 })
 
-// Endpoint Detail (SANGAT KUAT - Untuk bongkar link video)
+app.get('/search', async (c) => {
+  const q = c.req.query('q')
+  return c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${q}`) })
+})
+
+// FIX: Detail Scraper super kuat buat tembusin video
 app.get('/detail', async (c) => {
   const url = c.req.query('url')
   try {
@@ -52,22 +65,31 @@ app.get('/detail', async (c) => {
     const $ = load(html)
     const streams = []
 
-    // 1. Ambil dari Iframe & Data attributes (Lazy Load)
-    $('iframe, ins, div[data-src], a[data-frame-src]').each((i, el) => {
-      let src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-frame-src') || $(el).attr('href')
-      if (src && typeof src === 'string' && (src.includes('embed') || src.includes('player') || src.includes('video'))) {
-        if (src.startsWith('//')) src = 'https:' + src
-        if (!src.includes('ads') && !src.includes('facebook')) streams.push(src)
-      }
+    // Cari di semua elemen yang mencurigakan (iframe, div, link)
+    $('*').each((i, el) => {
+      const attributes = ['src', 'data-src', 'data-frame-src', 'data-lazy-src', 'href']
+      attributes.forEach(attr => {
+        let val = $(el).attr(attr)
+        if (val && typeof val === 'string') {
+          // Cari link yang mengandung kata kunci player/embed/video
+          if ((val.includes('embed') || val.includes('player') || val.includes('video.php') || val.includes('.m3u8')) && 
+              !val.includes('facebook') && !val.includes('twitter') && !val.includes('ads')) {
+            if (val.startsWith('//')) val = 'https:' + val
+            if (!streams.includes(val)) streams.push(val)
+          }
+        }
+      })
     })
 
-    // 2. Scan Script (Mencari link video yang di-inject JS)
-    const scripts = $('script').text()
+    // Cari di dalem Script (Regex Scan)
+    const scriptContent = $('script').text()
     const regex = /(?:https?:)?\/\/[^\s"'<>]+(?:embed|player|video|m3u8)[^\s"'<>]*/g
-    let match
-    while ((match = regex.exec(scripts)) !== null) {
-      let s = match[0].startsWith('//') ? 'https:' + match[0] : match[0]
-      if (!streams.includes(s) && !s.includes('ads')) streams.push(s)
+    const matches = scriptContent.match(regex)
+    if (matches) {
+      matches.forEach(m => {
+        let s = m.startsWith('//') ? 'https:' + m : m
+        if (!streams.includes(s) && !s.includes('ads')) streams.push(s)
+      })
     }
 
     return c.json({ 
