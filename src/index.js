@@ -14,16 +14,13 @@ async function scrapeList(url) {
     const html = await res.text()
     const $ = load(html)
     const data = []
-    
-    // Selector lebih luas biar semua film ketangkep
-    $('article, .post, .item, .ml-item, .col-md-2').each((i, el) => {
-      const title = $(el).find('h2, .entry-title, .post-title, h3').text().trim()
+    $('.ml-item, article, .post').each((i, el) => {
+      const title = $(el).find('h2, .entry-title, h3').text().trim()
       const link = $(el).find('a').attr('href')
       let img = $(el).find('img').attr('data-src') || $(el).find('img').attr('src')
-      
       if (title && link) {
         if (img && img.startsWith('//')) img = 'https:' + img
-        data.push({ title, link, img: img || 'https://via.placeholder.com/300x450?text=No+Image' })
+        data.push({ title, link, img: img || '' })
       }
     })
     return data
@@ -32,31 +29,24 @@ async function scrapeList(url) {
 
 app.get('/', async (c) => c.json({ status: true, data: await scrapeList(TARGET) }))
 
-// FIX: Route khusus buat Indonesia pake parameter search advanced
+// FIX: Jalur Indonesia
 app.get('/indonesia', async (c) => {
   const url = `${TARGET}/?s=&search=advanced&post_type=post&country=indonesia`
-  const data = await scrapeList(url)
-  return c.json({ status: true, data })
+  return c.json({ status: true, data: await scrapeList(url) })
+})
+
+// FIX: Jalur 18+ (Kita tembak langsung ke Tag-nya)
+app.get('/tag/18+', async (c) => {
+  const url = `${TARGET}/tag/18+/`
+  return c.json({ status: true, data: await scrapeList(url) })
 })
 
 app.get('/category/:slug', async (c) => {
-  const slug = c.req.param('slug')
-  const data = await scrapeList(`${TARGET}/category/${slug}/`)
+  const data = await scrapeList(`${TARGET}/category/${c.req.param('slug')}/`)
   return c.json({ status: true, data })
 })
 
-app.get('/tag/:slug', async (c) => {
-  const slug = c.req.param('slug')
-  const data = await scrapeList(`${TARGET}/tag/${slug}/`)
-  return c.json({ status: true, data })
-})
-
-app.get('/search', async (c) => {
-  const q = c.req.query('q')
-  return c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${q}`) })
-})
-
-// FIX: Detail Scraper super kuat buat tembusin video
+// BAGIAN PALING PENTING: Fix Link Video
 app.get('/detail', async (c) => {
   const url = c.req.query('url')
   try {
@@ -65,38 +55,25 @@ app.get('/detail', async (c) => {
     const $ = load(html)
     const streams = []
 
-    // Cari di semua elemen yang mencurigakan (iframe, div, link)
-    $('*').each((i, el) => {
-      const attributes = ['src', 'data-src', 'data-frame-src', 'data-lazy-src', 'href']
-      attributes.forEach(attr => {
-        let val = $(el).attr(attr)
-        if (val && typeof val === 'string') {
-          // Cari link yang mengandung kata kunci player/embed/video
-          if ((val.includes('embed') || val.includes('player') || val.includes('video.php') || val.includes('.m3u8')) && 
-              !val.includes('facebook') && !val.includes('twitter') && !val.includes('ads')) {
-            if (val.startsWith('//')) val = 'https:' + val
-            if (!streams.includes(val)) streams.push(val)
-          }
-        }
-      })
+    // 1. Cari Iframe murni
+    $('iframe').each((i, el) => {
+      let src = $(el).attr('src') || $(el).attr('data-src')
+      if (src && !src.includes('facebook') && !src.includes('ads')) {
+        if (src.startsWith('//')) src = 'https:' + src
+        streams.push(src)
+      }
     })
 
-    // Cari di dalem Script (Regex Scan)
-    const scriptContent = $('script').text()
-    const regex = /(?:https?:)?\/\/[^\s"'<>]+(?:embed|player|video|m3u8)[^\s"'<>]*/g
-    const matches = scriptContent.match(regex)
-    if (matches) {
-      matches.forEach(m => {
-        let s = m.startsWith('//') ? 'https:' + m : m
-        if (!streams.includes(s) && !s.includes('ads')) streams.push(s)
-      })
+    // 2. Bongkar Player (Bypass oEmbed error)
+    const scripts = $('script').text()
+    const regex = /"(https?:\/\/[^"]+(?:embed|player|video|m3u8)[^"]+)"/g
+    let match
+    while ((match = regex.exec(scripts)) !== null) {
+      let s = match[1].replace(/\\/g, '')
+      if (!streams.includes(s) && !s.includes('google')) streams.push(s)
     }
 
-    return c.json({ 
-      status: true, 
-      title: $('h1, .entry-title').first().text().trim(), 
-      streams: [...new Set(streams)] 
-    })
+    return c.json({ status: true, streams: [...new Set(streams)] })
   } catch { return c.json({ status: false, streams: [] }) }
 })
 
