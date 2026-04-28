@@ -6,36 +6,34 @@ const app = new Hono()
 app.use('/*', cors())
 
 const TARGET = 'https://tv10.lk21official.cc'
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
-async function scrapeList(url) {
+async function scrapePage(url) {
   try {
     const res = await fetch(url, { 
       headers: { 
         'User-Agent': UA,
-        'Referer': TARGET,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+        'Referer': TARGET
       } 
     })
-    
     if (!res.ok) return []
-    
     const html = await res.text()
     const $ = load(html)
     const data = []
-    
-    $('.ml-item, .item, article').each((i, el) => {
-      const title = $(el).find('h2, h3, .mli-info h2, .entry-title').text().trim()
-      const link = $(el).find('a').attr('href')
-      let img = $(el).find('img').attr('data-original') || 
+
+    // UPDATE SELECTOR: LK21 biasanya pake article di dalam grid-wrapper atau id konten
+    $('article, .grid-main .box, .mega-item').each((i, el) => {
+      const title = $(el).find('h2, h3, a').first().text().trim()
+      const link = $(el).find('a').first().attr('href')
+      // LK21 sering pake lazy load, kita ambil semua kemungkinan atribut gambar
+      let img = $(el).find('img').attr('src') || 
                 $(el).find('img').attr('data-src') || 
-                $(el).find('img').attr('src') ||
-                $(el).find('img').attr('data-lazy-src')
+                $(el).find('img').attr('data-original')
       
-      if (title && link) {
+      if (title && link && !link.includes('/category/') && !link.includes('/genre/')) {
         if (img && img.startsWith('//')) img = 'https:' + img
         data.push({ 
-          title: title.replace(/\n/g, '').trim(), 
+          title: title.replace('Nonton Movie', '').replace('Subtitle Indonesia', '').trim(), 
           link, 
           img: img || '' 
         })
@@ -45,40 +43,60 @@ async function scrapeList(url) {
   } catch { return [] }
 }
 
-app.get('/', async (c) => c.json({ status: true, data: await scrapeList(TARGET) }))
-app.get('/search', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${c.req.query('q')}`) }))
+async function scrapeFivePages(baseUrl) {
+  const pages = [1, 2, 3, 4, 5]
+  const tasks = pages.map(p => {
+    // Perbaikan jalur page: lk21 biasanya pake /v/page/2 atau ?page=2
+    // Kita coba pake format standar /page/x/ dulu
+    const url = p === 1 ? baseUrl : `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}page/${p}/`
+    return scrapePage(url)
+  })
+  
+  const results = await Promise.all(tasks)
+  return results.flat()
+}
 
-// FIX JALUR YEAR (Pake /release/ bukan /year/)
-app.get('/year-2015', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/release/2015/`) }))
-app.get('/year-2009', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/release/2009/`) }))
+// --- ENDPOINTS ---
 
-// GENRE & NEGARA
-app.get('/indonesia', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/country/indonesia/`) }))
-app.get('/best-rating', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/best-rating/`) }))
+app.get('/', async (c) => c.json({ status: true, data: await scrapePage(TARGET) }))
 
-app.get('/action', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/action/`) }))
-app.get('/adventure', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/adventure/`) }))
-app.get('/comedy', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/comedy/`) }))
-app.get('/crime', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/crime/`) }))
-app.get('/drama', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/drama/`) }))
-app.get('/fantasy', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/fantasy/`) }))
-app.get('/mystery', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/mystery/`) }))
-app.get('/romance', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/romance/`) }))
+app.get('/top-movie-today', async (c) => c.json({ status: true, data: await scrapePage(`${TARGET}/top-movie-today/`) }))
 
-// SEMI COLLECTION
-app.get('/semi-jepang', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/film-semi-jepang/`) }))
-app.get('/semi-philippines', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/film-semi-philippines/`) }))
-app.get('/semi-korea', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/film-semi-korea/`) }))
+// GENRE
+const genres = ['animation', 'action', 'adventure', 'comedy', 'crime', 'fantasy', 'family', 'horror', 'romance', 'thriller']
+genres.forEach(g => {
+  app.get(`/genre/${g}`, async (c) => c.json({ status: true, data: await scrapeFivePages(`${TARGET}/genre/${g}/`) }))
+})
+
+// COUNTRY
+const countries = ['usa', 'japan', 'south-korea', 'china', 'thailand']
+countries.forEach(ct => {
+  // Fix slug: south-korea di lk21 kadang 'korea' atau 'south-korea'
+  app.get(`/country/${ct}`, async (c) => c.json({ status: true, data: await scrapeFivePages(`${TARGET}/country/${ct}/`) }))
+})
+
+// YEAR
+const years = ['2017', '2018', '2019', '2020']
+years.forEach(y => {
+  app.get(`/year/${y}`, async (c) => c.json({ status: true, data: await scrapeFivePages(`${TARGET}/year/${y}/`) }))
+})
+
+app.get('/search', async (c) => {
+  const q = c.req.query('q')
+  return c.json({ status: true, data: await scrapePage(`${TARGET}/?s=${q}`) })
+})
 
 app.get('/detail', async (c) => {
   try {
-    const res = await fetch(c.req.query('url'), { headers: { 'User-Agent': UA, 'Referer': TARGET } })
+    const url = c.req.query('url')
+    const res = await fetch(url, { headers: { 'User-Agent': UA, 'Referer': TARGET } })
     const html = await res.text()
     const $ = load(html)
     const streams = []
     
+    // Player LK21 biasanya ada di dalam iframe atau script khusus
     $('iframe').each((i, el) => {
-      let src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src')
+      let src = $(el).attr('src') || $(el).attr('data-src')
       if (src && !src.includes('ads') && !src.includes('facebook')) {
         if (src.startsWith('//')) src = 'https:' + src
         streams.push(src)
