@@ -5,7 +5,7 @@ import { cors } from 'hono/cors'
 const app = new Hono()
 app.use('/*', cors())
 
-const TARGET = 'https://buddhistchaplainsnetwork.org'
+const TARGET = 'https://tv10.lk21official.cc'
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
 
 async function scrapeList(url) {
