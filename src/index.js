@@ -14,9 +14,9 @@ async function scrapeList(url) {
     const html = await res.text()
     const $ = load(html)
     const data = []
-    $('.ml-item, .item').each((i, el) => {
-      const title = $(el).find('h2, h3, .entry-title').text().trim()
-      const link = $(el).find('a').attr('href')
+    $('.ml-item, .item, article').each((i, el) => {
+      const title = $(el).find('h2, h3, .entry-title').first().text().trim()
+      const link = $(el).find('a').first().attr('href')
       let img = $(el).find('img').attr('data-src') || $(el).find('img').attr('src')
       if (title && link) {
         if (img && img.startsWith('//')) img = 'https:' + img
@@ -30,20 +30,18 @@ async function scrapeList(url) {
 app.get('/', async (c) => c.json({ status: true, data: await scrapeList(TARGET) }))
 app.get('/search', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${c.req.query('q')}`) }))
 
-// Jalur Langsung Tanpa Slug Ribet
+// FIX JALUR SESUAI LINK BARU
 app.get('/indonesia', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/country/indonesia/`) }))
-app.get('/semi-jepang', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/semi/jepang/`) }))
-app.get('/semi-korea', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/semi/korea/`) }))
-app.get('/semi-philippines', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/semi/philippines/`) }))
+app.get('/semi-jepang', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/film-semi-jepang/`) }))
+app.get('/semi-philippines', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/film-semi-philippines/`) }))
+app.get('/semi-korea', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/film-semi-korea/`) }))
+app.get('/best-rating', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/best-rating/`) }))
+app.get('/year-2015', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/year/2015/`) }))
 
-// Genre Lengkap Sesuai Foto
+// Genre
 app.get('/action', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/genre/action/`) }))
-app.get('/crime', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/genre/crime/`) }))
 app.get('/drama', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/genre/drama/`) }))
-app.get('/mystery', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/genre/mystery/`) }))
-app.get('/adventure', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/genre/adventure/`) }))
 app.get('/comedy', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/genre/comedy/`) }))
-app.get('/family', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/genre/family/`) }))
 
 app.get('/detail', async (c) => {
   try {
