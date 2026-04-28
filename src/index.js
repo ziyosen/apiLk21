@@ -6,8 +6,6 @@ const app = new Hono()
 app.use('/*', cors())
 
 const TARGET = 'https://buddhistchaplainsnetwork.org'
-
-// Pake User-Agent yang lebih "manusiawi" biar gak diblok
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
 
 async function scrapeList(url) {
@@ -26,21 +24,16 @@ async function scrapeList(url) {
     const $ = load(html)
     const data = []
     
-    // Selector diperluas biar gak ada yang kelewat
     $('.ml-item, .item, article').each((i, el) => {
       const title = $(el).find('h2, h3, .mli-info h2, .entry-title').text().trim()
       const link = $(el).find('a').attr('href')
-      
-      // Ambil gambar dari segala kemungkinan atribut lazy-load
       let img = $(el).find('img').attr('data-original') || 
                 $(el).find('img').attr('data-src') || 
                 $(el).find('img').attr('src') ||
                 $(el).find('img').attr('data-lazy-src')
       
       if (title && link) {
-        // Fix URL gambar kalau masih relatif atau pake //
         if (img && img.startsWith('//')) img = 'https:' + img
-        
         data.push({ 
           title: title.replace(/\n/g, '').trim(), 
           link, 
@@ -49,16 +42,20 @@ async function scrapeList(url) {
       }
     })
     return data
-  } catch (e) { 
-    console.log('Error Scrape:', e.message)
-    return [] 
-  }
+  } catch { return [] }
 }
 
 app.get('/', async (c) => c.json({ status: true, data: await scrapeList(TARGET) }))
 app.get('/search', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${c.req.query('q')}`) }))
 
-// GENRE (Jalur langsung sesuai website target)
+// FIX JALUR YEAR (Pake /release/ bukan /year/)
+app.get('/year-2015', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/release/2015/`) }))
+app.get('/year-2009', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/release/2009/`) }))
+
+// GENRE & NEGARA
+app.get('/indonesia', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/country/indonesia/`) }))
+app.get('/best-rating', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/best-rating/`) }))
+
 app.get('/action', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/action/`) }))
 app.get('/adventure', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/adventure/`) }))
 app.get('/comedy', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/comedy/`) }))
@@ -67,12 +64,6 @@ app.get('/drama', async (c) => c.json({ status: true, data: await scrapeList(`${
 app.get('/fantasy', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/fantasy/`) }))
 app.get('/mystery', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/mystery/`) }))
 app.get('/romance', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/romance/`) }))
-
-// LAIN-LAIN
-app.get('/indonesia', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/country/indonesia/`) }))
-app.get('/year-2015', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/year/2015/`) }))
-app.get('/year-2009', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/year/2009/`) }))
-app.get('/best-rating', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/best-rating/`) }))
 
 // SEMI COLLECTION
 app.get('/semi-jepang', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/film-semi-jepang/`) }))
@@ -88,7 +79,7 @@ app.get('/detail', async (c) => {
     
     $('iframe').each((i, el) => {
       let src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src')
-      if (src && !src.includes('ads') && !src.includes('facebook') && !src.includes('twitter')) {
+      if (src && !src.includes('ads') && !src.includes('facebook')) {
         if (src.startsWith('//')) src = 'https:' + src
         streams.push(src)
       }
