@@ -21,14 +21,16 @@ async function scrapeList(url) {
     const $ = load(html)
     const data = []
 
-    $('.ml-item, article, .item').each((i, el) => {
-      const title = $(el).find('h2, h3, .entry-title, .mli-info h2').text().trim()
+    // Selector lebih agresif: nangkep semua kemungkinan pembungkus film
+    $('.ml-item, article, .item, .post-item, .v-item').each((i, el) => {
+      const title = $(el).find('h2, h3, .entry-title, .mli-info h2, a.title').first().text().trim()
       const link = $(el).find('a').attr('href')
       let img = $(el).find('img').attr('data-original') || 
                 $(el).find('img').attr('data-src') || 
-                $(el).find('img').attr('src')
+                $(el).find('img').attr('src') ||
+                $(el).find('img').attr('data-lazy-src')
       
-      if (title && link) {
+      if (title && link && link.includes(TARGET)) {
         if (img && img.startsWith('//')) img = 'https:' + img
         data.push({ 
           title: title.replace(/Nonton|Movie|Subtitle|Indonesia/gi, '').trim(), 
@@ -48,39 +50,33 @@ async function scrapeInfinite(baseUrl, limitPage = 5) {
     tasks.push(scrapeList(url))
   }
   const results = await Promise.all(tasks)
-  return results.flat().filter((v, i, a) => a.findIndex(t => (t.link === v.link)) === i)
+  const combined = results.flat()
+  // Filter duplikat & pastiin link beneran ke film
+  return combined.filter((v, i, a) => a.findIndex(t => (t.link === v.link)) === i && !v.link.includes('/genre/'));
 }
 
 // --- ENDPOINTS ---
-
-// HOME
 app.get('/', async (c) => c.json({ status: true, data: await scrapeInfinite(TARGET, 3) }))
 
-// GENRE REGULAR (5 Halaman)
-const genres = [
-  'action', 'adventure', 'animation', 'comedy', 'crime', 
-  'drama', 'fantasy', 'family', 'horror', 'mystery', 
-  'romance', 'sci-fi', 'thriller', 'war', 'western'
-]
+// GENRE (Fix: Tambahin trailing slash biar gak kena redirect)
+const genres = ['action', 'adventure', 'animation', 'comedy', 'crime', 'drama', 'fantasy', 'family', 'horror', 'mystery', 'romance', 'sci-fi', 'thriller', 'war', 'western']
 genres.forEach(g => {
   app.get(`/genre/${g}`, async (c) => c.json({ status: true, data: await scrapeInfinite(`${TARGET}/genre/${g}/`, 5) }))
 })
 
-// AREA 18+ (Gantiin Endpoint Country)
+// AREA 18+
 app.get('/semi-jepang', async (c) => c.json({ status: true, data: await scrapeInfinite(`${TARGET}/genre/semi-jepang/`, 5) }))
 app.get('/semi-korea', async (c) => c.json({ status: true, data: await scrapeInfinite(`${TARGET}/genre/semi-korea/`, 5) }))
 app.get('/semi-philippines', async (c) => c.json({ status: true, data: await scrapeInfinite(`${TARGET}/genre/semi-philippines/`, 5) }))
 
-// TV MOVIE (Gantiin Endpoint Year)
+// TV MOVIE
 app.get('/tv-movie', async (c) => c.json({ status: true, data: await scrapeInfinite(`${TARGET}/genre/tv-movie/`, 5) }))
 
-// SEARCH
 app.get('/search', async (c) => {
   const q = c.req.query('q')
   return c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${q}`) })
 })
 
-// DETAIL & STREAMING
 app.get('/detail', async (c) => {
   try {
     const url = c.req.query('url')
@@ -88,9 +84,8 @@ app.get('/detail', async (c) => {
     const html = await res.text()
     const $ = load(html)
     const streams = []
-    
     $('iframe').each((i, el) => {
-      let src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src')
+      let src = $(el).attr('src') || $(el).attr('data-src')
       if (src && !src.includes('ads') && !src.includes('facebook')) {
         if (src.startsWith('//')) src = 'https:' + src
         streams.push(src)
