@@ -49,8 +49,8 @@ app.get('/', async (c) => c.json({ status: true, data: await scrapeList(TARGET) 
 app.get('/search', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${c.req.query('q')}`) }))
 
 // FIX JALUR YEAR (Pake /release/ bukan /year/)
-app.get('/year-2015', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/release/2015/`) }))
-app.get('/year-2009', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/release/2009/`) }))
+app.get('/year/2015', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/year/2015/`) }))
+app.get('/year/2009', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/year/2009/`) }))
 
 // GENRE & NEGARA
 app.get('/indonesia', async (c) => c.json({ status: true, data: await scrapeList(`${TARGET}/country/indonesia/`) }))
