@@ -79,7 +79,7 @@ countries.forEach(cn => {
 
 app.get('/semi-jepang', async (c) => c.json({ status: true, data: await scrapeInfinite(`${TARGET}/genre/semi-jepang/`, 15) }))
 app.get('/semi-korea', async (c) => c.json({ status: true, data: await scrapeInfinite(`${TARGET}/genre/semi-korea/`, 15) }))
-
+app.get('/semi-philippines', async (c) => c.json({ status: true, data: await scrapeInfinite(`${TARGET}/genre/semi-philippines/`, 15) }))
 app.get('/search', async (c) => {
   const q = c.req.query('q')
   return c.json({ status: true, data: await scrapeList(`${TARGET}/?s=${q}`) })
