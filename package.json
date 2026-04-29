@@ -1,14 +1,10 @@
 {
-  "name": "hometea-api",
+  "name": "moviehub-api-vercel",
+  "version": "1.0.0",
   "type": "module",
-  "scripts": {
-    "deploy": "wrangler deploy"
-  },
   "dependencies": {
     "hono": "^4.0.0",
+    "@hono/node-server": "^1.0.0",
     "cheerio": "^1.0.0-rc.12"
-  },
-  "devDependencies": {
-    "wrangler": "^3.0.0"
   }
 }
